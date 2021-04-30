@@ -4,15 +4,21 @@ let timers = {
     lastStarWarsReference: 0
 }
 
+function setVariableInterval (f) {
+    let t = f() || 1000;
+    setInterval(() => setVariableInterval(f), t);
+}
+
 setLastStarWarsReference(() => {
-    setInterval(() => {
+    setVariableInterval(() => {
         let elapsed = (Date.now() - timers.lastStarWarsReference) / 1000;
         let elapsedDays = Math.floor(elapsed / 86400);
         let elapsedHours = Math.floor((elapsed % 86400) / 3600);
         let elapsedMinutes = Math.floor((elapsed % 3600) / 60);
         let elapsedSeconds = (elapsed % 60).toFixed(3);
         timerSpan.innerHTML = `${elapsedDays} days, ${elapsedHours} hours, ${elapsedMinutes} minutes, ${elapsedSeconds} seconds.`;
-    }, 200 * Math.random());
+        return 100 * Math.random();
+    });
 });
 
 function setLastStarWarsReference (callback) {
