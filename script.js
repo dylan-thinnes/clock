@@ -16,7 +16,7 @@ setLastStarWarsReference(() => {
         let elapsedHours = Math.floor((elapsed % 86400) / 3600);
         let elapsedMinutes = Math.floor((elapsed % 3600) / 60);
         let elapsedSeconds = (elapsed % 60).toFixed(3);
-        timerSpan.innerHTML = `${elapsedDays} days, ${elapsedHours} hours, ${elapsedMinutes} minutes, ${elapsedSeconds} seconds.`;
+        timerSpan.innerHTML = `${elapsedDays} days, ${elapsedHours} hours, ${elapsedMinutes} minutes, ${elapsedSeconds} seconds`;
         return 100 * Math.random();
     });
 });
