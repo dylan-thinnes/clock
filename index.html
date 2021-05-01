@@ -9650,7 +9650,7 @@ var $author$project$Main$viewClock = F4(
 					_List_Nil,
 					_List_fromArray(
 						[
-							$rtfeldman$elm_css$Html$Styled$text('History of ' + (name + ' references on Didney Worl:'))
+							$rtfeldman$elm_css$Html$Styled$text('Lap times:')
 						])),
 					(!$elm$core$List$length(laps)) ? $rtfeldman$elm_css$Html$Styled$text('No laps found.') : A2(
 					toTable,
@@ -9678,6 +9678,17 @@ var $author$project$Main$view = function (model) {
 					_List_fromArray(
 						[
 							$rtfeldman$elm_css$Html$Styled$text('Welcome to THE CLOCK')
+						])),
+					A2(
+					$rtfeldman$elm_css$Html$Styled$p,
+					_List_Nil,
+					_List_fromArray(
+						[
+							$rtfeldman$elm_css$Html$Styled$text('[12:17 AM] Yeah, so everytime you make a star wars reference, we have to reset the clock'),
+							A2($rtfeldman$elm_css$Html$Styled$br, _List_Nil, _List_Nil),
+							$rtfeldman$elm_css$Html$Styled$text('[12:17 AM] talking about the clock is exempt of course'),
+							A2($rtfeldman$elm_css$Html$Styled$br, _List_Nil, _List_Nil),
+							$rtfeldman$elm_css$Html$Styled$text('[12:17 AM] and references have to be spaced out reasonably, can\'t log fifty references for our Plinkett discussion')
 						])),
 					function () {
 					switch (model.$) {

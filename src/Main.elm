@@ -133,6 +133,13 @@ view model =
     , body =
         List.map toUnstyled
             [ h2 [ css [ textAlign center ] ] [ text "Welcome to THE CLOCK" ]
+            , p []
+                [ text "[12:17 AM] Yeah, so everytime you make a star wars reference, we have to reset the clock"
+                , br [] []
+                , text "[12:17 AM] talking about the clock is exempt of course"
+                , br [] []
+                , text "[12:17 AM] and references have to be spaced out reasonably, can't log fifty references for our Plinkett discussion"
+                ]
             , case model of
                 Loading _ ->
                     text "Loading clock info..."
@@ -170,7 +177,7 @@ viewClock zone currTime idx { name, laps } =
     in
     div []
         [ button [ onClick <| LogNewReference idx ] [ text "Reset THE CLOCK!" ]
-        , h3 [] [ text <| "History of " ++ name ++ " references on Didney Worl:" ]
+        , h3 [] [ text "Lap times:" ]
         , if List.length laps == 0 then
             text "No laps found."
 
