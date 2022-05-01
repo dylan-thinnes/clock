@@ -1,14 +1,17 @@
 module Main exposing (..)
 
+import Array exposing (..)
 import Browser
 import Browser.Navigation exposing (Key)
 import Css exposing (..)
 import Html.Styled exposing (..)
 import Html.Styled.Attributes exposing (..)
-import Html.Styled.Events exposing (onClick)
+import Html.Styled.Events exposing (onCheck, onClick, onInput)
 import Http
+import Iso8601
 import Json.Decode as JD
 import Json.Encode as JE
+import Parser
 import Task
 import Time
 import Url exposing (Url)
@@ -19,8 +22,8 @@ type alias Flags =
 
 
 type Model
-    = Loading { zone : Maybe Time.Zone, clocks : Maybe (List Clock), currTime : Maybe Time.Posix }
-    | Loaded { zone : Time.Zone, clocks : List Clock, currTime : Time.Posix }
+    = Loading { zone : Maybe Time.Zone, clocks : Maybe (Array Clock), currTime : Maybe Time.Posix }
+    | Loaded { zone : Time.Zone, clocks : Array Clock, currTime : Time.Posix }
     | Error String
 
 
@@ -57,7 +60,7 @@ setClocks clocks =
     updateClocks (always clocks)
 
 
-updateClocks : (Maybe (List Clock) -> List Clock) -> Model -> Model
+updateClocks : (Maybe (Array Clock) -> Array Clock) -> Model -> Model
 updateClocks f model =
     tryFinishLoading <|
         case model of
@@ -88,15 +91,17 @@ updateCurrTime currTime model =
 type alias Clock =
     { name : String
     , laps : List Time.Posix
+    , explicitTime : Maybe String
     }
 
 
 type Msg
     = DoNothing
-    | LoadedHttpClocks (Result Http.Error (List Clock))
+    | LoadedHttpClocks (Result Http.Error (Array Clock))
     | LoadedZone Time.Zone
     | NewCurrTime Time.Posix
     | LogNewReference Int
+    | SetExplicitTime Int (Maybe String)
 
 
 main =
@@ -120,7 +125,7 @@ init _ _ _ =
     , Cmd.batch
         [ Http.get
             { url = url
-            , expect = Http.expectJson LoadedHttpClocks (JD.list decodeClock)
+            , expect = Http.expectJson LoadedHttpClocks (JD.array decodeClock)
             }
         , Task.perform LoadedZone Time.here
         ]
@@ -148,13 +153,13 @@ view model =
                     p [] [ text "An error occurred:", br [] [], text str ]
 
                 Loaded { zone, clocks, currTime } ->
-                    div [] <| List.indexedMap (viewClock zone currTime) clocks
+                    div [] <| Array.toList <| Array.indexedMap (viewClock zone currTime) clocks
             ]
     }
 
 
 viewClock : Time.Zone -> Time.Posix -> Int -> Clock -> Html Msg
-viewClock zone currTime idx { name, laps } =
+viewClock zone currTime idx { name, laps, explicitTime } =
     let
         toRow begin end =
             tr []
@@ -176,7 +181,49 @@ viewClock zone currTime idx { name, laps } =
                 )
     in
     div []
-        [ button [ onClick <| LogNewReference idx ] [ text "Reset THE CLOCK!" ]
+        [ button [ onClick <| LogNewReference idx, css [ Css.marginBottom (Css.em 1) ] ] [ text "Reset THE CLOCK!" ]
+        , br [] []
+        , input
+            [ id "toggleExplicitTime"
+            , onCheck <|
+                \b ->
+                    SetExplicitTime idx <|
+                        if b then
+                            Just ""
+
+                        else
+                            Nothing
+            , type_ "checkbox"
+            ]
+            []
+        , label [ for "toggleExplicitTime" ] [ text "Use a custom time instead: " ]
+        , input
+            [ type_ "text"
+            , onInput <| SetExplicitTime idx << Just
+            , Html.Styled.Attributes.disabled (explicitTime == Nothing)
+            , Html.Styled.Attributes.placeholder <|
+                case explicitTime of
+                    Nothing ->
+                        "Disabled."
+
+                    Just _ ->
+                        "Input a valid ISO8601 time."
+            , Html.Styled.Attributes.value <|
+                Maybe.withDefault "" explicitTime
+            , css <|
+                case explicitTime of
+                    Nothing ->
+                        []
+
+                    Just str ->
+                        case Iso8601.toTime str of
+                            Ok _ ->
+                                []
+
+                            Err _ ->
+                                [ Css.borderColor (hex "f00") ]
+            ]
+            []
         , h3 [] [ text "Lap times:" ]
         , if List.length laps == 0 then
             text "No laps found."
@@ -257,35 +304,89 @@ update msg model =
         NewCurrTime posix ->
             ( updateCurrTime posix model, Cmd.none )
 
-        LogNewReference idx ->
-            let
-                updateAtIdx i f =
-                    List.indexedMap
-                        (\j a ->
-                            if i == j then
-                                f a
-
-                            else
-                                a
-                        )
-            in
+        SetExplicitTime idx newExplicitTime ->
             case model of
                 Loaded loaded ->
-                    let
-                        newClocks =
-                            updateAtIdx idx (\clock -> { clock | laps = loaded.currTime :: clock.laps }) loaded.clocks
-                    in
-                    ( Loaded { loaded | clocks = newClocks }
-                    , Http.request
-                        { url = url
-                        , method = "PUT"
-                        , headers = []
-                        , body = Http.jsonBody <| JE.list encodeClock newClocks
-                        , expect = Http.expectWhatever (always DoNothing)
-                        , timeout = Nothing
-                        , tracker = Nothing
-                        }
-                    )
+                    case Array.get idx loaded.clocks of
+                        Nothing ->
+                            ( model, Cmd.none )
+
+                        Just targetClock ->
+                            let
+                                newClock =
+                                    { targetClock | explicitTime = newExplicitTime }
+                            in
+                            ( Loaded { loaded | clocks = Array.set idx newClock loaded.clocks }
+                            , Cmd.none
+                            )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        LogNewReference idx ->
+            case model of
+                Loaded loaded ->
+                    case Array.get idx loaded.clocks of
+                        Nothing ->
+                            ( model, Cmd.none )
+
+                        Just targetClock ->
+                            let
+                                newLapTime : Result (List Parser.DeadEnd) Time.Posix
+                                newLapTime =
+                                    case targetClock.explicitTime of
+                                        Nothing ->
+                                            Ok loaded.currTime
+
+                                        Just explicitTime ->
+                                            Iso8601.toTime explicitTime
+                            in
+                            case newLapTime of
+                                Err error ->
+                                    ( model, Cmd.none )
+
+                                Ok posix ->
+                                    let
+                                        newClock =
+                                            let
+                                                eliminateDuplicates times =
+                                                    case times of
+                                                        [] ->
+                                                            []
+
+                                                        x :: rest ->
+                                                            case eliminateDuplicates rest of
+                                                                [] ->
+                                                                    x :: []
+
+                                                                y :: restrest ->
+                                                                    if abs (Time.posixToMillis x - Time.posixToMillis y) < 60000 then
+                                                                        y :: restrest
+
+                                                                    else
+                                                                        x :: y :: restrest
+
+                                                newLaps =
+                                                    eliminateDuplicates <|
+                                                        List.reverse <|
+                                                            List.sortBy Time.posixToMillis (posix :: targetClock.laps)
+                                            in
+                                            { targetClock | laps = newLaps }
+
+                                        newClocks =
+                                            Array.set idx newClock loaded.clocks
+                                    in
+                                    ( Loaded { loaded | clocks = newClocks }
+                                    , Http.request
+                                        { url = url
+                                        , method = "PUT"
+                                        , headers = []
+                                        , body = Http.jsonBody <| JE.array encodeClock newClocks
+                                        , expect = Http.expectWhatever (always DoNothing)
+                                        , timeout = Nothing
+                                        , tracker = Nothing
+                                        }
+                                    )
 
                 _ ->
                     ( model, Cmd.none )
@@ -298,7 +399,10 @@ subscriptions model =
 
 decodeClock : JD.Decoder Clock
 decodeClock =
-    JD.map2 Clock (JD.field "name" JD.string) (JD.field "laps" (JD.list (JD.map Time.millisToPosix JD.int)))
+    JD.map2
+        (\name laps -> Clock name laps Nothing)
+        (JD.field "name" JD.string)
+        (JD.field "laps" (JD.list (JD.map Time.millisToPosix JD.int)))
 
 
 encodeClock : Clock -> JE.Value
